@@ -238,11 +238,20 @@ function renderQuestion(idx) {
   // 共用题干
   const stem = document.getElementById('stem-area');
   if ((sec.type==='material' || sec.type==='case') && q.content) {
-    const gi = findStemGroup(sec, idx);
-    stem.style.display = 'block';
-    document.getElementById('stem-content').textContent = gi.stem;
-    document.getElementById('stem-range').textContent = `第${gi.start+1}-${gi.end+1}题共用此题干`;
-  } else { stem.style.display = 'none'; }
+    const parts = q.content.split('\n\n');
+    if (parts.length >= 2) {
+      stem.style.display = 'block';
+      document.getElementById('stem-content').textContent = parts[0];
+      document.getElementById('stem-range').textContent = '共用题干';
+      // 只显示子题部分
+      q._displayContent = parts.slice(1).join('\n\n');
+    } else {
+      stem.style.display = 'block';
+      document.getElementById('stem-content').textContent = q.content;
+      document.getElementById('stem-range').textContent = '题干';
+      q._displayContent = '';
+    }
+  } else { stem.style.display = 'none'; q._displayContent = q.content; }
 
   // 题型判断
   const isMulti = (sec.type === 'multi' || sec.type === 'case');
@@ -274,20 +283,13 @@ function renderQuestion(idx) {
         <span class="q-type">${typeLabel}</span>
         ${typeHint}
       </div>
-      <div class="q-content">${q.content||'(题目内容加载中)'}</div>
+      <div class="q-content">${q._displayContent||q.content||'(题目内容加载中)'}</div>
       <div class="q-options">${optHtml}</div>
     </div>
   `;
 
   restoreAnswer(q.id);
   updateNav();
-}
-
-function findStemGroup(sec, idx) {
-  const qs = sec.questions;
-  const gs = Math.floor(idx/5)*5;
-  const ge = Math.min(gs+4, qs.length-1);
-  return {stem: qs[gs]?.content||'共用题干', start:gs, end:ge};
 }
 
 function getGlobalNum() {
