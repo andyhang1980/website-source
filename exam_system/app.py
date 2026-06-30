@@ -365,118 +365,258 @@ def import_excel():
 @app.route('/api/admin/import/text', methods=['POST'])
 @admin
 def import_text():
-    """参考 SurveyKing 格式导入文本试题
-    格式示例：
-    [单选题]
-    1. 以下哪项是恶性肿瘤的特征？
-    A. 分化好
-    B. 异型性小
-    C. 浸润性生长
-    D. 核分裂象少
-    答案：C
-    解析：恶性肿瘤的特征包括浸润性生长和转移。
-
-    [多选题]
-    2. 以下哪些属于癌前病变？
-    A. 乳腺导管上皮增生
+    """导入文本试题 - 支持完整层级格式
+    格式：
+    【单选题】
+    分类：各论-消化
+    8. 题目内容
+    A. 选项A
     ...
+    答案：G
+    解析：解析内容
+
+    【共用题干】/ 【案例分析题】
+    题干：共享题干内容
+    提问1：子题内容
+    A. ...
+    答案：C
+    解析：...
+    提问2：...
     """
     j = request.get_json()
-    qu_type = j.get('type', 'radio')
+    default_type = j.get('type', 'radio')
     text = j.get('text', '').strip()
 
     if not text:
         return jsonify({"code":400,"message":"请输入试题内容"}),400
 
     imported, skipped = 0, 0
-    # Split into individual questions by double newline
-    questions = re.split(r'\n\s*\n+', text)
 
-    for block in questions:
-        block = block.strip()
-        if not block or len(block) < 5: continue
+    # 按【题型】标记分段
+    sections = re.split(r'【([^】]+)】', text)
 
-        lines = [l.strip() for l in block.split('\n') if l.strip()]
-        if not lines: continue
+    # sections[0] is text before first 【】, then alternating: type_name, content, type_name, content...
+    i = 1  # skip leading text before first type marker
+    while i < len(sections) - 1:
+        type_name = sections[i].strip()
+        section_text = sections[i + 1].strip()
+        i += 2
 
-        # Parse question
-        content = ''
-        options = []
-        answer_set = set()
-        analysis = ''
+        qu_type = SHEET_TYPE_MAP.get(type_name, default_type)
+        is_grouped = qu_type in ('material', 'case')
 
-        i = 0
-        # Find content (first non-option line)
-        while i < len(lines):
-            ln = lines[i]
-            # Check if it's an option line (A. B. C. ...)
-            if re.match(r'^[A-H][.、)\s]', ln.upper()):
-                break
-            if ln.startswith('答案') or ln.startswith('解析'):
-                break
-            content += ln + '\n'
-            i += 1
-        content = content.strip()
+        # 按 分类：开头的块或连续空行分割大题组
+        groups = _split_question_groups(section_text, is_grouped)
 
-        # Parse options
-        while i < len(lines):
-            ln = lines[i].strip()
-            # Match A. xxx or A、xxx or A) xxx
-            m = re.match(r'^([A-H])[.、)\s]+(.+)', ln, re.IGNORECASE)
-            if m:
-                options.append({'tag': m.group(1).upper(), 'content': m.group(2).strip(), 'is_right': 0})
-                i += 1
-            else:
-                break
-
-        # Parse answer
-        if i < len(lines) and lines[i].startswith('答案'):
-            ans_raw = re.sub(r'^答案[：:]*\s*', '', lines[i]).strip()
-            parts = re.findall(r'[A-H]', ans_raw.upper())
-            answer_set = set(parts)
-            i += 1
-
-        # Parse analysis
-        while i < len(lines):
-            analysis += lines[i].replace('解析：', '').replace('解析:', '').strip() + '\n'
-            i += 1
-        analysis = analysis.strip()
-
-        # Mark correct options
-        for opt in options:
-            if opt['tag'] in answer_set:
-                opt['is_right'] = 1
-
-        # Default options if none parsed
-        if not options:
-            for letter in 'ABCD':
-                options.append({'tag': letter, 'content': f'选项{letter}', 'is_right': 1 if letter in answer_set else 0})
-
-        if not content:
-            skipped += 1
-            continue
-
-        question = {
-            'content': content,
-            'analysis': analysis,
-            'options': options,
-            'qu_type': qu_type,
-        }
-
-        try:
-            _insert_question(question)
-            imported += 1
-        except Exception as e:
-            import traceback
-            print(f"[Import Error] {str(e)}", flush=True)
-            traceback.print_exc()
-            skipped += 1
+        for group in groups:
+            try:
+                count = _import_question_group(group, qu_type)
+                imported += count
+            except Exception as e:
+                import traceback
+                print(f"[Import Error] {str(e)}", flush=True)
+                traceback.print_exc()
+                skipped += 1
 
     return jsonify({
         "code": 200,
-        "message": f"导入完成：成功 {imported} 题，跳过 {skipped} 题",
+        "message": f"导入完成：成功 {imported} 题，跳过 {skipped} 组",
         "data": {"imported": imported, "skipped": skipped}
     })
+
+
+def _split_question_groups(text, is_grouped):
+    """将文本段拆分为独立的题目组。
+    对于共用题干/案例分析：每个 题干： 开头为一组。
+    对于单选/多选：每个带编号的题目为一组。
+    """
+    lines = text.split('\n')
+    groups = []
+    current = []
+
+    for line in lines:
+        stripped = line.strip()
+        # 检测新组的开始标记
+        is_new_group = False
+        if is_grouped and re.match(r'^题干[：:]', stripped):
+            is_new_group = True
+        elif not is_grouped and re.match(r'^(\d+)[.、)\s]', stripped) and current:
+            # 单选/多选：遇到新的编号题目，且当前已有内容
+            is_new_group = True
+
+        if is_new_group and current:
+            groups.append('\n'.join(current))
+            current = [line]
+        else:
+            if stripped or current:  # 保持内容连贯
+                current.append(line)
+
+    if current:
+        joined = '\n'.join(current).strip()
+        if joined:
+            groups.append(joined)
+
+    return groups
+
+
+def _import_question_group(text, qu_type):
+    """导入一组题目，返回导入的题目数。
+    对于共用题干/案例分析：解析 题干 + 提问N 结构。
+    对于单选/多选：解析单道题。
+    """
+    is_grouped = qu_type in ('material', 'case')
+
+    if not is_grouped:
+        # 单选/多选：直接解析
+        q = _parse_single_question(text, qu_type)
+        if q:
+            _insert_question(q)
+            return 1
+        return 0
+
+    # 共用题干/案例分析：提取共享题干和各子题
+    lines = [l for l in text.split('\n')]
+    stem = ''
+    category = ''
+    sub_questions = []  # [(sub_title, sub_lines)]
+    current_sub = None
+    current_lines = []
+
+    for line in lines:
+        stripped = line.strip()
+
+        # 提取分类
+        m_cat = re.match(r'^分类[：:]\s*(.+)', stripped)
+        if m_cat:
+            category = m_cat.group(1).strip()
+            continue
+
+        # 提取题干
+        m_stem = re.match(r'^题干[：:]\s*(.*)', stripped)
+        if m_stem:
+            stem = m_stem.group(1).strip()
+            # 题干可能跨多行，后续非 提问 的行也属于题干
+            continue
+
+        # 提取提问标记
+        m_sub = re.match(r'^提问(\d+)[：:]\s*(.*)', stripped)
+        if m_sub:
+            # 保存之前的子题
+            if current_sub is not None:
+                sub_questions.append((current_sub, current_lines))
+            current_sub = m_sub.group(2).strip() or f'提问{m_sub.group(1)}'
+            current_lines = []
+            continue
+
+        # 如果已经有子题在解析中，累积到当前子题
+        if current_sub is not None:
+            current_lines.append(line)
+        elif stem and stripped:
+            # 题干后续内容（多行题干）
+            stem += '\n' + stripped
+
+    # 保存最后一个子题
+    if current_sub is not None:
+        sub_questions.append((current_sub, current_lines))
+
+    if not sub_questions:
+        # 没有子题结构，当作单题处理
+        q = _parse_single_question(text, qu_type)
+        if q:
+            _insert_question(q)
+            return 1
+        return 0
+
+    # 为每个子题生成独立记录，content = 题干 + 子题
+    count = 0
+    for sub_title, sub_lines in sub_questions:
+        sub_text = '\n'.join(sub_lines)
+        full_content = f"{stem}\n\n{sub_title}" if stem else sub_title
+        q = _parse_single_question(full_content + '\n' + sub_text, qu_type)
+        if q:
+            # 用完整题干替换 content
+            q['content'] = clean(full_content)
+            _insert_question(q)
+            count += 1
+
+    return count
+
+
+def _parse_single_question(text, qu_type):
+    """解析单道题目文本，返回 content, options, analysis, qu_type"""
+    lines = [l.strip() for l in text.split('\n') if l.strip()]
+    if not lines:
+        return None
+
+    content = ''
+    options = []
+    answer_set = set()
+    analysis = ''
+
+    i = 0
+
+    # 1. 解析题目内容（选项行之前的所有文本）
+    while i < len(lines):
+        ln = lines[i]
+        if re.match(r'^[A-H][.、)\s]', ln):
+            break
+        if ln.startswith('答案') or ln.startswith('解析'):
+            break
+        content += (ln + '\n') if content else ln
+        i += 1
+    content = content.strip()
+
+    # 2. 解析选项
+    while i < len(lines):
+        ln = lines[i]
+        m = re.match(r'^([A-H])[.、)\s]+(.+)', ln, re.IGNORECASE)
+        if m:
+            options.append({'tag': m.group(1).upper(), 'content': m.group(2).strip(), 'is_right': 0})
+            i += 1
+        else:
+            break
+
+    # 3. 解析答案
+    if i < len(lines) and lines[i].startswith('答案'):
+        ans_raw = re.sub(r'^答案[：:]*\s*', '', lines[i]).strip()
+        parts = re.findall(r'[A-H]', ans_raw.upper())
+        answer_set = set(parts)
+        i += 1
+
+    # 4. 解析答案（多行情况：答案跨行）
+    while i < len(lines) and re.match(r'^[A-H]+$', lines[i].strip()):
+        parts = re.findall(r'[A-H]', lines[i].strip().upper())
+        answer_set.update(parts)
+        i += 1
+
+    # 5. 解析解析（剩余所有行）
+    while i < len(lines):
+        ln = lines[i]
+        # 去掉 "解析：" 或 "解析:" 前缀
+        ln = re.sub(r'^解析[：:]\s*', '', ln)
+        analysis += (ln + '\n') if analysis else ln
+        i += 1
+    analysis = analysis.strip()
+
+    # 标记正确选项
+    for opt in options:
+        if opt['tag'] in answer_set:
+            opt['is_right'] = 1
+
+    # 无选项时生成默认
+    if not options:
+        for letter in 'ABCD':
+            options.append({'tag': letter, 'content': f'选项{letter}', 'is_right': 1 if letter in answer_set else 0})
+
+    if not content:
+        return None
+
+    return {
+        'content': content,
+        'analysis': analysis,
+        'options': options,
+        'qu_type': qu_type,
+    }
 
 def _insert_question(q):
     """插入一道试题到数据库"""
