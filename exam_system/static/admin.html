@@ -1,0 +1,42 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<title>病理学机考系统 · 管理后台</title>
+<link rel="stylesheet" href="style.css?v=3.1">
+</head>
+<body>
+
+<!-- 管理登录 -->
+<div id="pg-admin-login" class="page active">
+  <div class="auth-box admin-auth">
+    <h1>⚙️ 管理后台</h1>
+    <p class="subtitle">病理学高级职称考试机考系统</p>
+    <input id="admin-login-user" placeholder="管理员账号" autocomplete="off">
+    <input id="admin-login-pass" type="password" placeholder="密码">
+    <button class="btn-primary" onclick="doAdminLogin()">管理员登录</button>
+    <p class="hint">
+      <a href="/" style="color:#5680e9;">← 返回考生登录</a>
+    </p>
+  </div>
+</div>
+
+<!-- 管理面板 -->
+<div id="pg-admin-panel" class="page">
+  <header style="background:#1a1a2e">
+    <h2>⚙️ 管理后台</h2>
+    <div class="header-right">
+      <button class="btn-sm" onclick="switchAdminTab('papers')">📋 试卷管理</button>
+      <button class="btn-sm" onclick="switchAdminTab('import')">📥 试题导入</button>
+      <button class="btn-sm" onclick="switchAdminTab('stats')">📊 数据统计</button>
+      <a href="/" class="btn-sm" style="text-decoration:none;color:inherit;">🏠 考生首页</a>
+      <button class="btn-sm btn-outline" onclick="doAdminLogout()">退出</button>
+    </div>
+  </header>
+  <div id="admin-content"></div>
+</div>
+
+<script src="admin.js?v=3.1"></script>
+</body>
+</html>

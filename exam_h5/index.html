@@ -1,0 +1,142 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>病理学高级职称考试</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div id="app">
+        <!-- 登录界面 -->
+        <div id="login-page" class="page active">
+            <div class="login-box">
+                <h2>病理学高级职称考试系统</h2>
+                <input type="text" id="username" placeholder="用户名">
+                <input type="password" id="password" placeholder="密码">
+                <button onclick="login()">登录</button>
+                <p class="register-link">还没有账号？<a href="#" onclick="showRegister()">立即注册</a></p>
+            </div>
+        </div>
+
+        <!-- 注册界面 -->
+        <div id="register-page" class="page">
+            <div class="login-box">
+                <h2>用户注册</h2>
+                <input type="text" id="reg-username" placeholder="用户名">
+                <input type="password" id="reg-password" placeholder="密码">
+                <input type="password" id="reg-confirm-password" placeholder="确认密码">
+                <button onclick="register()">注册</button>
+                <p class="register-link">已有账号？<a href="#" onclick="showLogin()">返回登录</a></p>
+            </div>
+        </div>
+
+        <!-- 首页 - 试卷列表 -->
+        <div id="home-page" class="page">
+            <div class="header">
+                <h2>病理学高级职称考试系统</h2>
+                <button onclick="logout()" class="btn-logout">退出</button>
+            </div>
+            <div class="paper-list">
+                <h3>可选试卷</h3>
+                <div id="paper-container"></div>
+            </div>
+        </div>
+
+        <!-- 考试说明 -->
+        <div id="intro-page" class="page">
+            <div class="intro-box">
+                <h2 id="paper-title"></h2>
+                <div class="rules">
+                    <h3>考试须知：</h3>
+                    <ul>
+                        <li>本次考试包含4个部分：单选题、多选题、共用题干题、案例分析题</li>
+                        <li>每个部分之间有过渡说明，点击"继续"进入下一部分</li>
+                        <li>共用题干题和案例分析题每组题共用同一个题干</li>
+                        <li>考试时间：120分钟</li>
+                        <li>满分：100分</li>
+                    </ul>
+                </div>
+                <button onclick="startExam()" class="btn-start">开始考试</button>
+            </div>
+        </div>
+
+        <!-- 板块过渡说明 -->
+        <div id="section-intro-page" class="page">
+            <div class="section-intro">
+                <div class="section-badge" id="section-badge"></div>
+                <h2 id="section-title"></h2>
+                <p id="section-desc"></p>
+                <div class="section-meta">
+                    <span id="section-range"></span>
+                    <span id="section-score"></span>
+                </div>
+                <button onclick="startSection()" class="btn-next">进入本部分</button>
+            </div>
+        </div>
+
+        <!-- 答题界面 -->
+        <div id="exam-page" class="page">
+            <div class="exam-header">
+                <div class="timer">剩余时间：<span id="time-left"></span></div>
+                <div class="progress">
+                    <div class="progress-bar">
+                        <div class="progress-fill" id="progress-fill"></div>
+                    </div>
+                    <span id="progress-text"></span>
+                </div>
+                <button onclick="finishExam()" class="btn-submit">交卷</button>
+            </div>
+            
+            <!-- 共用题干区域 -->
+            <div id="shared-stem-area" class="shared-stem" style="display:none;">
+                <div class="shared-stem-header">
+                    <span class="shared-badge">共用题干</span>
+                    <span class="shared-range" id="shared-range"></span>
+                </div>
+                <div class="shared-stem-content" id="shared-stem-content"></div>
+            </div>
+
+            <div class="question-container" id="question-container">
+                <!-- 问题动态加载 -->
+            </div>
+
+            <div class="navigation">
+                <button onclick="prevQuestion()" id="btn-prev">上一题</button>
+                <button onclick="nextQuestion()" id="btn-next">下一题</button>
+            </div>
+        </div>
+
+        <!-- 结果页面 -->
+        <div id="result-page" class="page">
+            <div class="result-box">
+                <h2>考试结束</h2>
+                <div class="score-display">
+                    <div class="score-circle">
+                        <span id="final-score">0</span>
+                        <span class="score-label">分</span>
+                    </div>
+                </div>
+                <div class="stats">
+                    <div class="stat-item">
+                        <span class="stat-value" id="correct-count">0</span>
+                        <span class="stat-label">答对</span>
+                    </div>
+                    <div class="stat-item">
+                        <span class="stat-value" id="wrong-count">0</span>
+                        <span class="stat-label">答错</span>
+                    </div>
+                    <div class="stat-item">
+                        <span class="stat-value" id="unanswered-count">0</span>
+                        <span class="stat-label">未答</span>
+                    </div>
+                </div>
+                <div id="detailed-result"></div>
+                <button onclick="backToHome()" class="btn-home">返回首页</button>
+            </div>
+        </div>
+    </div>
+
+    <script src="app.js"></script>
+</body>
+</html>

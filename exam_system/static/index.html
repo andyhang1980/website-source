@@ -1,0 +1,158 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<title>病理学机考系统</title>
+<link rel="stylesheet" href="style.css?v=3.1">
+</head>
+<body>
+
+<!-- ============ 登录页 ============ -->
+<div id="pg-login" class="page active">
+  <div class="auth-box">
+    <h1>🔬 病理学机考系统</h1>
+    <p class="subtitle">高级职称考试 · 沉浸式体验</p>
+    <div class="tabs">
+      <button class="tab active" onclick="switchAuthTab('login')">登录</button>
+      <button class="tab" onclick="switchAuthTab('register')">注册</button>
+    </div>
+    <div id="form-login">
+      <input id="login-user" placeholder="用户名" autocomplete="off">
+      <input id="login-pass" type="password" placeholder="密码">
+      <button class="btn-primary" onclick="doLogin()">登 录</button>
+      <p class="hint">管理员请访问 <a href="/admin" style="color:#5680e9;">管理后台</a></p>
+    </div>
+    <div id="form-register" style="display:none">
+      <input id="reg-user" placeholder="用户名" autocomplete="off">
+      <input id="reg-pass" type="password" placeholder="密码(至少4位)">
+      <input id="reg-pass2" type="password" placeholder="确认密码">
+      <button class="btn-primary" onclick="doRegister()">注 册</button>
+    </div>
+  </div>
+</div>
+
+<!-- ============ 学生首页 ============ -->
+<div id="pg-home" class="page">
+  <header>
+    <h2>🔬 病理学机考系统</h2>
+    <div class="header-right">
+      <span id="user-name"></span>
+      <button class="btn-sm" onclick="showRecords()">📊 我的成绩</button>
+      <button class="btn-sm btn-outline" onclick="doLogout()">退出</button>
+    </div>
+  </header>
+  <div id="paper-list" class="paper-grid"></div>
+  <div id="records-panel" style="display:none"></div>
+</div>
+
+<!-- ============ 考试说明 ============ -->
+<div id="pg-intro" class="page dark-bg">
+  <div class="intro-card">
+    <h2 id="exam-title"></h2>
+    <div class="exam-meta">
+      <span>⏱ <span id="exam-duration"></span>分钟</span>
+      <span>📝 <span id="exam-total"></span>题</span>
+      <span>💯 <span id="exam-score"></span>分</span>
+    </div>
+    <div class="rules">
+      <h3>📋 考试须知</h3>
+      <ul>
+        <li>单选题每题1分，多选题每题2分</li>
+        <li>多选题多选/少选/错选均不得分</li>
+        <li>共用题干题每组题共用同一题干，案例分析题为不定项选择</li>
+        <li>右侧答题卡可快速跳转，已答题目显示蓝色</li>
+        <li>交卷后可在回顾页查看全部题目答案和解析</li>
+      </ul>
+    </div>
+    <button class="btn-primary btn-lg" onclick="startExam()">🚀 开始考试</button>
+  </div>
+</div>
+
+<!-- ============ 板块过渡 ============ -->
+<div id="pg-section-intro" class="page dark-bg">
+  <div class="section-intro-card">
+    <div class="section-badge" id="sec-badge"></div>
+    <h2 id="sec-title"></h2>
+    <p id="sec-desc"></p>
+    <div class="section-stats"><span id="sec-count"></span></div>
+    <button class="btn-primary btn-lg" onclick="enterSection()">▶ 进入本部分</button>
+  </div>
+</div>
+
+<!-- ============ 答题界面 ============ -->
+<div id="pg-exam" class="page">
+  <!-- 顶部栏 -->
+  <div class="exam-topbar">
+    <div class="timer" id="timer-display">⏱ 120:00</div>
+    <div class="progress-wrap">
+      <div class="progress-bar"><div class="progress-fill" id="prog-fill"></div></div>
+      <span id="prog-text">0/100</span>
+    </div>
+    <button class="btn-sm" onclick="toggleAnswerSheet()" style="background:#2a2a4a;color:#ccc;">📋 答题卡</button>
+    <button class="btn-submit" onclick="confirmSubmit()">交卷</button>
+  </div>
+
+  <!-- 主区域：题目 + 答题卡 -->
+  <div class="exam-main">
+    <!-- 题目区域 -->
+    <div class="exam-left">
+      <!-- 共用题干 -->
+      <div id="stem-area" class="stem-area" style="display:none">
+        <div class="stem-header">
+          <span class="stem-badge">📋 共用题干</span>
+          <span id="stem-range"></span>
+        </div>
+        <div class="stem-content" id="stem-content"></div>
+      </div>
+      <!-- 题目内容 -->
+      <div class="question-scroll" id="q-area"></div>
+      <!-- 底部导航 -->
+      <div class="nav-bar">
+        <button class="btn-nav" id="btn-prev" onclick="prevQ()">◀ 上一题</button>
+        <span class="q-indicator" id="q-indicator"></span>
+        <button class="btn-nav" id="btn-next" onclick="nextQ()">下一题 ▶</button>
+      </div>
+    </div>
+
+    <!-- 答题卡侧边栏 -->
+    <div class="exam-right" id="answer-sheet">
+      <div class="sheet-header">
+        <span>📋 答题卡</span>
+        <span class="sheet-legend">
+          <span class="dot done"></span>已答
+          <span class="dot cur"></span>当前
+          <span class="dot und"></span>未答
+        </span>
+      </div>
+      <div class="sheet-body" id="sheet-body"></div>
+    </div>
+  </div>
+</div>
+
+<!-- ============ 成绩+回顾页 ============ -->
+<div id="pg-result" class="page">
+  <!-- 成绩头部 -->
+  <div class="result-header">
+    <h2>🎉 考试完成</h2>
+    <div class="score-row">
+      <div class="score-circle">
+        <span id="res-score">0</span><small>分</small>
+      </div>
+      <div class="result-stats">
+        <div><span class="stat-v" id="res-total">0</span><span class="stat-l">总题数</span></div>
+        <div class="stat-good"><span class="stat-v" id="res-correct">0</span><span class="stat-l">答对</span></div>
+        <div class="stat-bad"><span class="stat-v" id="res-wrong">0</span><span class="stat-l">答错</span></div>
+        <div><span class="stat-v" id="res-rate">0%</span><span class="stat-l">正确率</span></div>
+      </div>
+    </div>
+    <button class="btn-primary" onclick="showPage('pg-home');loadPapers()">返回首页</button>
+    <button class="btn-outline" onclick="document.getElementById('review-area').scrollIntoView({behavior:'smooth'})">👇 查看解析</button>
+  </div>
+  <!-- 题目回顾 -->
+  <div class="review-area" id="review-area"></div>
+</div>
+
+<script src="app.js?v=3.1"></script>
+</body>
+</html>
