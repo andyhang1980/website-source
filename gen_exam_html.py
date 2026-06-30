@@ -406,11 +406,20 @@ function renderQ(idx){
   updateSheet();
   
   var stem=$('stem-area');
+  var dc=q.content||'';
   if((sec.type==='material'||sec.type==='case')&&q.content){
-    var gs=Math.floor(idx/5)*5,ge=Math.min(gs+4,(sec.questions||[]).length-1);
-    stem.style.display='block';
-    $('#stem-content').textContent=(sec.questions[gs]||{}).content||'';
-    $('#stem-range').textContent='第'+(gs+1)+'-'+(ge+1)+'题共用';
+    var parts=q.content.split('\\n\\n');
+    if(parts.length>=2){
+      stem.style.display='block';
+      $('#stem-content').textContent=parts[0];
+      $('#stem-range').textContent='共用题干';
+      dc=parts.slice(1).join('\\n\\n');
+    }else{
+      stem.style.display='block';
+      $('#stem-content').textContent=q.content;
+      $('#stem-range').textContent='题干';
+      dc='';
+    }
   }else{stem.style.display='none';}
   
   var isM=sec.type==='multi'||sec.type==='case';
@@ -425,7 +434,7 @@ function renderQ(idx){
     oh+='<div class="opt" onclick="toggleOpt(this,\\''+q.id+'\\',\\''+o.key+'\\',\\''+it+'\\')" data-key="'+o.key+'"><span class="opt-icon">'+ic+'</span><span>'+o.text+'</span></div>';
   });
   
-  $('#q-area').innerHTML='<div class="q-card"><div class="q-header"><span class="q-num">第 '+gn+' 题</span><span class="q-type">'+tl+'</span>'+ht+'</div><div class="q-content">'+(q.content||'')+'</div><div class="q-options">'+oh+'</div></div>';
+  $('#q-area').innerHTML='<div class="q-card"><div class="q-header"><span class="q-num">第 '+gn+' 题</span><span class="q-type">'+tl+'</span>'+ht+'</div><div class="q-content">'+(dc||q.content||'')+'</div><div class="q-options">'+oh+'</div></div>';
   restoreA(q.id);updateNav();
 }
 
