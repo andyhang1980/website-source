@@ -204,14 +204,16 @@ function showQuestion(idx) {
   
   // 共用题干处理
   const q = questions[idx];
+  let displayContent = q.content || '（题目内容待加载）';
   if ((section.type === 'material' || section.type === 'case') && q.content) {
-    // 尝试找到共用题干组
     const stemInfo = findSharedStem(section, idx);
     if (stemInfo) {
       document.getElementById('shared-stem-area').style.display = 'block';
       document.getElementById('shared-stem-content').textContent = stemInfo.stem;
-      document.getElementById('shared-range').textContent = 
-        `第${stemInfo.start+1}-${stemInfo.end+1}题共用此题干`;
+      document.getElementById('shared-range').textContent = '共用题干';
+      if (stemInfo.subContent) {
+        displayContent = stemInfo.subContent;
+      }
     } else {
       document.getElementById('shared-stem-area').style.display = 'none';
     }
@@ -249,7 +251,7 @@ function showQuestion(idx) {
         <span class="q-num">第${globalNum}题</span>
         <span class="q-type-tag">${section.name}</span>
       </div>
-      <div class="question-text">${q.content || '（题目内容待加载）'}</div>
+      <div class="question-text">${displayContent}</div>
       <div class="options">${optionsHtml}</div>
     </div>
   `;
@@ -265,35 +267,16 @@ function showQuestion(idx) {
 }
 
 function findSharedStem(section, idx) {
-  const questions = section.questions;
-  // 简化处理：如果是材料题，每组的题干存储在第一题或最后一题
-  // 这里我们假设每个题都是独立的（内容中可能包含题干）
-  // 实际上，我们需要根据实际数据结构来分组
-  
-  // 对于 case/multi 类型，如果题目内容包含题干信息
-  // 在这里我们简单处理：每5个题一组共享题干
-  const groupSize = 5;
-  const groupStart = Math.floor(idx / groupSize) * groupSize;
-  const groupEnd = Math.min(groupStart + groupSize - 1, questions.length - 1);
-  
-  if (groupStart === idx) {
+  const q = section.questions[idx];
+  if (!q || !q.content) return null;
+  const parts = q.content.split('\n\n');
+  if (parts.length >= 2) {
     return {
-      stem: questions[idx].content || '共用题干内容',
-      start: groupStart,
-      end: groupEnd
+      stem: parts[0],
+      subContent: parts.slice(1).join('\n\n')
     };
   }
-  
-  // 同一组的其他题：用第一题的题干
-  if (questions[groupStart]) {
-    return {
-      stem: questions[groupStart].content || '共用题干内容',
-      start: groupStart,
-      end: groupEnd
-    };
-  }
-  
-  return null;
+  return { stem: q.content, subContent: '' };
 }
 
 function getGlobalQuestionNum(sectionIdx) {
