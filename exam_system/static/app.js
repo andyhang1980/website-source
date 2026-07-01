@@ -402,8 +402,9 @@ async function finishExam() {
 
   if (r.code === 200 && r.data) {
     const d = r.data;
-    // 成绩
-    document.getElementById('res-score').textContent = d.score||0;
+    // 成绩显示：得分/满分
+    const scoreText = d.maxScore ? (d.score + ' / ' + d.maxScore) : (d.score || 0);
+    document.getElementById('res-score').textContent = scoreText;
     document.getElementById('res-total').textContent = d.totalCount||0;
     document.getElementById('res-correct').textContent = d.correctCount||0;
     document.getElementById('res-wrong').textContent = (d.totalCount||0)-(d.correctCount||0);
@@ -432,6 +433,22 @@ function renderReview() {
     const correctAns = q.correctAnswer || [];
     const cardClass = isCorrect ? 'review-correct' : 'review-wrong';
 
+    // 部分得分显示（案例分析题等）
+    let scoreTag = '';
+    if (q.type === 'case' && q.questionMax !== undefined) {
+      const qs = q.questionScore || 0;
+      const qm = q.questionMax || 1;
+      if (qs > 0 && qs < qm) {
+        scoreTag = `<span class="review-result tag-partial" style="background:#e67e22;color:#fff;padding:2px 8px;border-radius:4px;margin-left:8px;">部分得分: ${qs}/${qm}</span>`;
+      } else if (qs >= qm) {
+        scoreTag = `<span style="color:#27ae60;margin-left:8px;">(${qs}/${qm})</span>`;
+      } else {
+        scoreTag = `<span style="color:#e74c3c;margin-left:8px;">(0/${qm})</span>`;
+      }
+    } else if (q.type === 'multi' && q.questionMax !== undefined) {
+      scoreTag = `<span style="margin-left:8px;color:${isCorrect?'#27ae60':'#e74c3c'};">(${q.questionScore||0}/${q.questionMax})</span>`;
+    }
+
     let optHtml = (q.options||[]).map(o => {
       let cls = 'review-opt';
       if (o.isRight) cls += ' opt-right';
@@ -452,6 +469,7 @@ function renderReview() {
           <span class="review-q-num">第${i+1}题</span>
           <span class="review-q-type">${typeNames[q.type]||q.type||''}</span>
           <span class="review-result ${isCorrect?'tag-correct':'tag-wrong'}">${isCorrect?'✓ 回答正确':'✗ 回答错误'}</span>
+          ${scoreTag}
         </div>
         <div class="review-q-content">${q.content||''}</div>
         <div class="review-options">${optHtml}</div>
