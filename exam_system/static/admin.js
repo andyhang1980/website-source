@@ -67,6 +67,7 @@ async function switchAdminTab(tab) {
   const el = document.getElementById('admin-content');
   switch(tab){
     case 'papers': await renderPaperManager(el); break;
+    case 'users': await renderUserManager(el); break;
     case 'import': renderImportPage(el); break;
     case 'stats': await renderStats(el); break;
   }
@@ -131,6 +132,51 @@ async function delPaper(id) {
   if(!confirm('确定删除？')) return;
   await aa('/api/admin/papers/'+id,{method:'DELETE'});
   switchAdminTab('papers');
+}
+
+// ==================== 用户管理 ====================
+async function renderUserManager(el) {
+  const r = await aa('/api/admin/users');
+  const us = r.data||[];
+  el.innerHTML = `<div class="admin-section">
+    <h3>👤 用户管理 <span style="color:#aaa;font-weight:normal;font-size:14px;">共 ${us.length} 个用户</span></h3>
+    <div style="margin-bottom:12px;">
+      <button class="btn-primary btn-sm" onclick="toggleSelectAllUsers(this)">☐ 全选</button>
+      <button class="btn-sm btn-del" onclick="deleteSelectedUsers()" style="background:#e74c3c;color:#fff;border:none;">🗑 删除选中</button>
+    </div>
+    <table class="tbl">
+      <tr><th style="width:40px"><input type="checkbox" id="sel-all-cb" onchange="toggleSelectAllUsers(this)"></th><th>用户名</th><th>姓名</th><th>状态</th><th>考试次数</th><th>注册时间</th></tr>
+      ${us.map(u=>`<tr>
+        <td><input type="checkbox" class="user-cb" value="${u.id}" data-name="${u.user_name}" ${u.user_name==='admin'?'disabled title="管理员账号不可选"':''}></td>
+        <td>${u.user_name}${u.user_name==='admin'?' <span style="color:#e67e22;font-size:11px;">[管理员]</span>':''}</td>
+        <td>${u.real_name||'--'}</td>
+        <td>${u.state?'🟢 正常':'🔴 禁用'}</td>
+        <td>${u.exam_count||0}</td>
+        <td>${(u.create_time||'').substring(0,16)}</td>
+      </tr>`).join('')||'<tr><td colspan="6">暂无用户</td></tr>'}
+    </table>
+  </div>`;
+}
+
+function toggleSelectAllUsers(el) {
+  const cbs = document.querySelectorAll('.user-cb:not(:disabled)');
+  const allChecked = el.checked || (el.type !== 'checkbox' && Array.from(cbs).every(c=>c.checked));
+  const newState = el.type === 'checkbox' ? el.checked : !Array.from(cbs).every(c=>c.checked);
+  cbs.forEach(c => c.checked = newState);
+  const selAllCb = document.getElementById('sel-all-cb');
+  if (selAllCb && el !== selAllCb) selAllCb.checked = newState;
+  if (el.type !== 'checkbox') el.textContent = newState ? '☑ 取消全选' : '☐ 全选';
+}
+
+async function deleteSelectedUsers() {
+  const cbs = document.querySelectorAll('.user-cb:checked');
+  if (!cbs.length) return alert('请先选择要删除的用户');
+  const ids = Array.from(cbs).map(c => c.value);
+  const names = Array.from(cbs).map(c => c.getAttribute('data-name'));
+  if (!confirm(`确定删除以下 ${ids.length} 个用户？\n\n${names.join(', ')}\n\n此操作不可恢复，用户的考试记录也会一并删除。`)) return;
+  const r = await aa('/api/admin/users', {method:'DELETE', body:JSON.stringify({ids: ids})});
+  alert(r.message || '操作完成');
+  switchAdminTab('users');
 }
 
 // ==================== 试题导入 ====================
