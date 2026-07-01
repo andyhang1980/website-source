@@ -316,13 +316,20 @@ def _strip_html(text):
 @app.route('/api/paper/<paper_id>/submit', methods=['POST'])
 @login_required
 def submit_paper(paper_id):
-    """提交试卷答案（含完整解析数据）"""
+    """提交试卷答案（含完整解析数据）
+    计分规则：
+    - 单选题(radio)：每题1分，错选不得分
+    - 共用题干题(material)：每小问1分，错选不得分
+    - 多选题(multi)：每题2分，必须与标准答案完全一致才得分
+    - 案例分析题(case)：每个提问1分，按选项权重得分/扣分，最低0分
+    """
     data = request.get_json()
     answers = data.get('answers', {})
 
     correct_count = 0
     total_count = 0
-    score = 0
+    score = 0.0
+    max_score = 0.0
     details = []
 
     db = get_db()
@@ -353,11 +360,35 @@ def submit_paper(paper_id):
             if is_correct:
                 correct_count += 1
 
-            # 多选题每题2分，其他每题1分
+            # ---- 分题型计分 ----
             qu_type = qinfo['qu_type'] if qinfo else ''
-            weight = 2 if qu_type == 'multi' else 1
-            if is_correct:
-                score += weight
+            q_score = 0.0
+            q_max = 1.0
+
+            if qu_type == 'radio':
+                q_max = 1.0
+                q_score = 1.0 if is_correct else 0.0
+            elif qu_type == 'material':
+                q_max = 1.0
+                q_score = 1.0 if is_correct else 0.0
+            elif qu_type == 'multi':
+                q_max = 2.0
+                q_score = 2.0 if is_correct else 0.0
+            elif qu_type == 'case':
+                q_max = 1.0
+                n_correct = len(correct_tags)
+                if n_correct > 0:
+                    w = 1.0 / n_correct
+                    correct_picks = set(user_answer) & set(correct_tags)
+                    q_score = len(correct_picks) * w
+                    wrong_picks = set(user_answer) - set(correct_tags)
+                    q_score -= len(wrong_picks) * w
+                    q_score = max(0.0, q_score)
+                else:
+                    q_score = 0.0
+
+            score += q_score
+            max_score += q_max
 
             details.append({
                 "quId": qu_id,
@@ -365,12 +396,16 @@ def submit_paper(paper_id):
                 "type": qu_type,
                 "analysis": _strip_html(qinfo['analysis']) if qinfo else '',
                 "options": options,
-                "userAnswer": user_answer,
-                "correctAnswer": correct_tags,
+                "userAnswer": sorted(user_answer),
+                "correctAnswer": sorted(correct_tags),
                 "isCorrect": is_correct,
+                "questionScore": round(q_score, 2),
+                "questionMax": q_max,
             })
 
-        percentage = round(score / total_count * 100, 1) if total_count > 0 else 0
+        score = round(score, 2)
+        max_score = round(max_score, 2)
+        percentage = round(score / max_score * 100, 1) if max_score > 0 else 0
 
         # 保存考试记录
         try:
@@ -391,6 +426,7 @@ def submit_paper(paper_id):
                 "totalCount": total_count,
                 "correctCount": correct_count,
                 "score": score,
+                "maxScore": max_score,
                 "percentage": percentage,
                 "details": details,
             }
