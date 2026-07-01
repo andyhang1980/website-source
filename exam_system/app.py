@@ -745,12 +745,18 @@ def _pick_questions(d, qu_type, limit, user_id=None, paper_id=None):
 @app.route('/api/exam/<paper_id>/submit', methods=['POST'])
 @auth
 def submit_exam(paper_id):
-    """提交试卷答案，返回评分+全部题目详情用于回顾"""
+    """提交试卷答案，返回评分+全部题目详情用于回顾
+    计分规则：
+    - 单选题(radio)：每题1分，错选不得分
+    - 共用题干题(material)：每小问1分，错选不得分
+    - 多选题(multi)：每题2分，必须与标准答案完全一致才得分
+    - 案例分析题(case)：每个提问1分，按选项权重得分/扣分，最低0分
+    """
     j = request.get_json()
     answers = j.get('answers', {})
     d = db()
     try:
-        correct = 0; total = 0; details = []
+        correct = 0; total = 0; score = 0.0; max_score = 0.0; details = []
         for qid, ua in answers.items():
             total += 1
             if isinstance(ua, str): ua = [ua]
@@ -759,38 +765,86 @@ def submit_exam(paper_id):
                 c.execute("SELECT tag,content,is_right FROM el_repo_qu_answer WHERE qu_id=%s ORDER BY tag",(qid,))
                 opts = c.fetchall()
             ct = sorted([r['tag'] for r in opts if r['is_right'] == 1])
-            is_c = ua_sorted == ct
-            if is_c: correct += 1
 
-            # 查题目内容
+            # 查题目信息
             with d.cursor() as c:
                 c.execute("SELECT content,analysis,qu_type FROM el_repo_qu WHERE id=%s",(qid,))
                 qinfo = c.fetchone()
 
+            qu_type = qinfo['qu_type'] if qinfo else ''
+            is_c = ua_sorted == ct
+            if is_c: correct += 1
+
+            # ---- 分题型计分 ----
+            q_score = 0.0
+            q_max = 1.0
+
+            if qu_type == 'radio':
+                # 单选题：每题1分，错选不得分
+                q_max = 1.0
+                q_score = 1.0 if is_c else 0.0
+
+            elif qu_type == 'material':
+                # 共用题干单选题：每小问1分，错选不得分
+                q_max = 1.0
+                q_score = 1.0 if is_c else 0.0
+
+            elif qu_type == 'multi':
+                # 多选题：每题2分，必须与标准答案完全一致才得分
+                q_max = 2.0
+                q_score = 2.0 if is_c else 0.0
+
+            elif qu_type == 'case':
+                # 案例分析题：每个提问1分，按选项权重得分/扣分
+                q_max = 1.0
+                n_correct = len(ct)
+                if n_correct > 0:
+                    w = 1.0 / n_correct  # 每个正确选项的分值权重
+                    # 少选：按选对的选项得对应分值
+                    correct_picks = set(ua_sorted) & set(ct)
+                    q_score = len(correct_picks) * w
+                    # 多选/错选：倒扣对应选项的分值
+                    wrong_picks = set(ua_sorted) - set(ct)
+                    q_score -= len(wrong_picks) * w
+                    # 保底：最低0分
+                    q_score = max(0.0, q_score)
+                else:
+                    q_score = 0.0
+
+            score += q_score
+            max_score += q_max
+
             details.append({
                 "quId": qid,
                 "content": clean(qinfo['content']) if qinfo else '',
-                "type": qinfo['qu_type'] if qinfo else '',
+                "type": qu_type,
                 "analysis": clean(qinfo['analysis']) if qinfo else '',
                 "options": [{"key":r['tag'],"text":clean(r['content']),"isRight":r['is_right']==1} for r in opts],
                 "userAnswer": ua_sorted,
                 "correctAnswer": ct,
                 "isCorrect": is_c,
+                "questionScore": round(q_score, 2),
+                "questionMax": q_max,
             })
 
-        score = correct
-        pct = round(correct/total*100,1) if total>0 else 0
+        score = round(score, 2)
+        max_score = round(max_score, 2)
+        pct = round(score / max_score * 100, 1) if max_score > 0 else 0
 
         rid = new_id()
-        with d.cursor() as c:
-            c.execute("""INSERT INTO exam_record (id,user_id,paper_id,answers,score,total,correct_count,percentage,duration,create_time)
-                VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,NOW())""",
-                (rid, request.uid, paper_id, json.dumps(answers,ensure_ascii=False),
-                 score, total, correct, pct, j.get('duration',0)))
+        try:
+            with d.cursor() as c:
+                c.execute("""INSERT INTO exam_record (id,user_id,paper_id,answers,score,total,correct_count,percentage,duration,create_time)
+                    VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,NOW())""",
+                    (rid, request.uid, paper_id, json.dumps(answers,ensure_ascii=False),
+                     score, total, correct, pct, j.get('duration',0)))
             d.commit()
+        except Exception as e:
+            app.logger.warning(f"Failed to save exam record: {e}")
 
         return jsonify({"code":200,"data":{
-            "totalCount":total,"correctCount":correct,"score":score,"percentage":pct,
+            "totalCount":total,"correctCount":correct,
+            "score":score,"maxScore":max_score,"percentage":pct,
             "details":details
         }})
     except Exception as e:
