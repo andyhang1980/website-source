@@ -879,6 +879,62 @@ def all_records():
         return jsonify({"code":200,"data":rs})
     finally: d.close()
 
+# ============ 用户管理 ============
+@app.route('/api/admin/users', methods=['GET'])
+@admin
+def admin_users():
+    """获取所有用户列表"""
+    d = db()
+    try:
+        with d.cursor() as c:
+            c.execute("""SELECT u.id, u.user_name, u.real_name, u.state, u.create_time,
+                COUNT(r.id) as exam_count
+                FROM el_sys_user u
+                LEFT JOIN exam_record r ON r.user_id = u.id
+                GROUP BY u.id, u.user_name, u.real_name, u.state, u.create_time
+                ORDER BY u.create_time DESC""")
+            us = c.fetchall()
+        return jsonify({"code":200,"data":us})
+    finally: d.close()
+
+@app.route('/api/admin/users', methods=['DELETE'])
+@admin
+def admin_delete_users():
+    """批量删除用户（不能删除admin）"""
+    j = request.get_json()
+    ids = j.get('ids', [])
+    if not ids:
+        return jsonify({"code":400,"message":"请选择要删除的用户"}),400
+
+    d = db()
+    try:
+        # 过滤掉 admin 账号
+        placeholders = ','.join(['%s'] * len(ids))
+        with d.cursor() as c:
+            c.execute(f"SELECT id, user_name FROM el_sys_user WHERE id IN ({placeholders})", ids)
+            users = c.fetchall()
+
+        to_delete = [u['id'] for u in users if u['user_name'] != 'admin']
+        skipped = len(ids) - len(to_delete)
+
+        if not to_delete:
+            return jsonify({"code":400,"message":"不能删除管理员账号"}),400
+
+        # 删除用户的考试记录
+        with d.cursor() as c:
+            ph = ','.join(['%s'] * len(to_delete))
+            c.execute(f"DELETE FROM exam_record WHERE user_id IN ({ph})", to_delete)
+            c.execute(f"DELETE FROM el_sys_user WHERE id IN ({ph})", to_delete)
+            d.commit()
+
+        msg = f"成功删除 {len(to_delete)} 个用户"
+        if skipped:
+            msg += f"，跳过 {skipped} 个（管理员账号）"
+        return jsonify({"code":200,"message":msg})
+    except Exception as e:
+        return jsonify({"code":500,"message":str(e)}),500
+    finally: d.close()
+
 # ============ 题库模板下载（参考SurveyKing） ============
 @app.route('/api/admin/template', methods=['GET'])
 @admin
